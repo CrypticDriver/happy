@@ -16,7 +16,12 @@ import { Fastify } from '../types';
 import { db } from '@/storage/db';
 import { s3client, s3bucket, isLocalStorage, getLocalFilesDir, putLocalFile } from '@/storage/files';
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+// Configurable via HAPPY_MAX_FILE_SIZE_MB (megabytes). Defaults to 10MB to
+// match the previous hardcoded limit. Note: the local-mode PUT route below
+// sets its own fastify `bodyLimit` derived from this value, since the global
+// bodyLimit configured in api.ts (100MB) would otherwise silently cap larger
+// uploads before this check ever runs.
+const MAX_FILE_SIZE = (parseInt(process.env.HAPPY_MAX_FILE_SIZE_MB || '10', 10)) * 1024 * 1024;
 const PRESIGNED_TTL_SECONDS = 15 * 60; // 15 minutes (design spec)
 
 // Per-user, per-process token bucket for request-upload. Best-effort flood
@@ -114,7 +119,7 @@ export function attachmentRoutes(app: Fastify) {
         }
 
         if (size > MAX_FILE_SIZE) {
-            return reply.code(413).send({ error: 'File too large (max 10MB)' });
+            return reply.code(413).send({ error: `File too large (max ${Math.floor(MAX_FILE_SIZE / (1024 * 1024))}MB)` });
         }
 
         // Always .enc — encrypted opaque blobs, never trust client filename for path.
@@ -165,6 +170,12 @@ export function attachmentRoutes(app: Fastify) {
                 413: z.object({ error: z.string() }),
             },
         },
+        // The global fastify bodyLimit (api.ts) is a fixed 100MB ceiling that
+        // predates HAPPY_MAX_FILE_SIZE_MB. Give this route its own bodyLimit
+        // derived from MAX_FILE_SIZE (with headroom for encryption/encoding
+        // overhead) so operators can raise the configured limit above 100MB
+        // and actually have it take effect for local-mode direct uploads.
+        bodyLimit: MAX_FILE_SIZE + 1 * 1024 * 1024,
         preHandler: app.authenticate,
     }, async (request, reply) => {
         if (!isLocalStorage()) {
@@ -189,7 +200,7 @@ export function attachmentRoutes(app: Fastify) {
 
         const body = request.body as Buffer;
         if (body.length > MAX_FILE_SIZE) {
-            return reply.code(413).send({ error: 'File too large (max 10MB)' });
+            return reply.code(413).send({ error: `File too large (max ${Math.floor(MAX_FILE_SIZE / (1024 * 1024))}MB)` });
         }
 
         const ref = `sessions/${sessionId}/attachments/${attachmentFile}`;

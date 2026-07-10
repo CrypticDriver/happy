@@ -91,6 +91,8 @@ interface AgentInputProps {
     onPickImages?: () => void;
     onRemoveImage?: (id: string) => void;
     onAddImages?: (images: AttachmentPreview[]) => void;
+    /** Arbitrary (non-image) file attachments, reuses the same upload pipeline. */
+    onPickFiles?: () => void;
 }
 
 const MAX_CONTEXT_SIZE = 190000;
@@ -1345,6 +1347,29 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                             color={(props.selectedImages?.length ?? 0) > 0
                                                 ? theme.colors.radio.active
                                                 : theme.colors.button.secondary.tint}
+                                        />
+                                    </Pressable>
+                                )}
+                                {/* Arbitrary file picker button (reuses attachment upload pipeline) */}
+                                {props.onPickFiles && (
+                                    <Pressable
+                                        onPress={props.onPickFiles}
+                                        hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
+                                        style={(p) => ({
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            borderRadius: Platform.select({ default: 16, android: 20 }),
+                                            paddingHorizontal: 8,
+                                            paddingVertical: 6,
+                                            justifyContent: 'center',
+                                            height: 32,
+                                            opacity: p.pressed ? 0.7 : 1,
+                                        })}
+                                    >
+                                        <Ionicons
+                                            name="attach-outline"
+                                            size={16}
+                                            color={theme.colors.button.secondary.tint}
                                         />
                                     </Pressable>
                                 )}

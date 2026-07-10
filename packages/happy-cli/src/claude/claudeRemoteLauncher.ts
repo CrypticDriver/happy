@@ -17,6 +17,7 @@ import { getToolName } from "./utils/getToolName";
 import { getAskUserQuestionToolCallIds } from "./utils/questionNotification";
 import { cleanupStdinAfterInk } from "@/utils/terminalStdinCleanup";
 import type { MessageParam, ContentBlockParam } from '@anthropic-ai/sdk/resources';
+import { saveNonImageAttachment } from "./utils/nonImageAttachments";
 
 interface PermissionsField {
     date: number;
@@ -347,6 +348,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                             const attachments = msg.attachments ?? [];
                             if (attachments.length > 0) {
                                 const contentBlocks: ContentBlockParam[] = [];
+                                const uploadNotes: string[] = [];
                                 for (const att of attachments) {
                                     // Detect media type from the decrypted bytes' magic header
                                     // rather than trusting the wire-supplied mimeType. iOS image
@@ -354,10 +356,13 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                                     // mimeType at all, which the Anthropic API rejects with a
                                     // strict enum validation error. If the bytes look like one
                                     // of the four formats Claude accepts, send that label —
-                                    // otherwise skip the attachment with a debug log.
+                                    // otherwise fall through to saving it to disk below so
+                                    // Claude can still read it via normal file tools.
                                     const detected = detectClaudeImageMime(att.data);
                                     if (!detected) {
-                                        logger.debug(`[remote] Skipping unsupported attachment (no magic-byte match): ${att.name}, claimed mimeType=${att.mimeType}`);
+                                        logger.debug(`[remote] Non-image attachment (no magic-byte match): ${att.name}, claimed mimeType=${att.mimeType}; saving to disk`);
+                                        const saved = saveNonImageAttachment(att);
+                                        uploadNotes.push(`📎 Uploaded file: ${saved.relativePath} (${saved.size} bytes)`);
                                         continue;
                                     }
                                     contentBlocks.push({
@@ -369,7 +374,10 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                                         },
                                     });
                                 }
-                                contentBlocks.push({ type: 'text' as const, text: msg.message });
+                                const messageText = uploadNotes.length > 0
+                                    ? `${uploadNotes.join('\n')}\n${msg.message}`
+                                    : msg.message;
+                                contentBlocks.push({ type: 'text' as const, text: messageText });
                                 logger.debug(`[remote] Combined ${contentBlocks.length - 1} image(s) with text message`);
                                 return {
                                     message: contentBlocks,

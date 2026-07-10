@@ -39,6 +39,26 @@ import { getProjectPath } from './utils/path';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { RawJSONLinesSchema, type RawJSONLines } from './types';
+import { lookupTag, recordSid } from './sessionLineage';
+
+/**
+ * Extract a `--resume <sessionId>` argument from Claude CLI args, mirroring
+ * the UUID heuristic in Session.consumeOneTimeFlags (next arg present, not
+ * a flag, contains a dash). Returns null for a bare `--resume` (no id) or
+ * when the flag is absent.
+ */
+function extractResumeSessionId(claudeArgs: string[] | undefined): string | null {
+    if (!claudeArgs) return null;
+    for (let i = 0; i < claudeArgs.length; i++) {
+        if (claudeArgs[i] !== '--resume') continue;
+        const next = claudeArgs[i + 1];
+        if (next && !next.startsWith('-') && next.includes('-')) {
+            return next;
+        }
+        return null;
+    }
+    return null;
+}
 
 /** JavaScript runtime to use for spawning Claude Code */
 export type JsRuntime = 'node' | 'bun'
@@ -72,7 +92,18 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     logger.debug(`[CLAUDE] This is the Claude agent, NOT Gemini`);
     
     const workingDirectory = process.cwd();
-    const sessionTag = randomUUID();
+    // Crash-recovery stable tag (goudan-mods): if this invocation is a
+    // `claude --resume <sid>` for a Claude session ID we've seen before,
+    // reuse the Happy tag we recorded for it last time. getOrCreateSession
+    // is a get-or-create by (accountId, tag) — reusing the tag means the
+    // server hands back the *same* session row (same title/history) instead
+    // of minting a new one, so a crash + resume doesn't fork the chat.
+    const resumeClaudeSessionId = extractResumeSessionId(options.claudeArgs);
+    const lineageTag = resumeClaudeSessionId ? lookupTag(resumeClaudeSessionId) : null;
+    const sessionTag = lineageTag ?? randomUUID();
+    if (lineageTag) {
+        logger.debug(`[START] Resuming Claude session ${resumeClaudeSessionId} with known Happy tag ${lineageTag}`);
+    }
 
     // Log environment info at startup
     logger.debugLargeJson('[START] Happy process started', getEnvironmentInfo());
@@ -249,6 +280,14 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     }
 
     logger.debug(`Session created: ${response.id}`);
+
+    // Record lineage immediately: if we already know the Claude session ID
+    // being resumed, tie it to this Happy tag right away so a crash before
+    // the SessionStart hook fires (which also calls recordSid via
+    // session.onSessionFound) still leaves a usable mapping.
+    if (resumeClaudeSessionId) {
+        recordSid(resumeClaudeSessionId, sessionTag);
+    }
 
     // Always report to daemon if it exists
     try {
@@ -949,7 +988,8 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         claudeArgs: options.claudeArgs,
         sandboxConfig,
         hookSettingsPath,
-        jsRuntime: options.jsRuntime
+        jsRuntime: options.jsRuntime,
+        happyTag: sessionTag
     });
 
     // Cleanup session resources (intervals, callbacks) - prevents memory leak

@@ -496,7 +496,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
     // Image attachment state (expImageUpload feature flag)
     const expImageUpload = useSetting('expImageUpload');
-    const { selectedImages, pickImages, removeImage, clearImages, addImages } = useImagePicker();
+    const { selectedImages, pickImages, pickFiles, removeImage, clearImages, addImages } = useImagePicker();
 
     // ChatComposer owns the message state + useDraft subscription. We only
     // hold an imperative handle so handleSend can read the live text and
@@ -722,6 +722,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             onFileViewerPress={experiments && !isTablet ? handleFileViewerPress : undefined}
             selectedImages={expImageUpload ? selectedImages : undefined}
             onPickImages={expImageUpload ? pickImages : undefined}
+            onPickFiles={expImageUpload ? pickFiles : undefined}
             onRemoveImage={expImageUpload ? removeImage : undefined}
             onAddImages={expImageUpload ? addImages : undefined}
             autocompletePrefixes={AGENT_INPUT_AUTOCOMPLETE_PREFIXES}

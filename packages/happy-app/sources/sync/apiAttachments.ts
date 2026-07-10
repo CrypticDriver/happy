@@ -18,7 +18,11 @@ import {
 import { getServerUrl } from './serverConfig';
 import { appendFormFile } from './uploadFormFile';
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+// Client-side display-only constant for the 413 error message below. Kept in
+// sync with hooks/useImagePicker.ts MAX_FILE_SIZE (sync/ cannot import from
+// hooks/, see file docstring above) — the actual enforced limit is always
+// whatever the server returns via HAPPY_MAX_FILE_SIZE_MB.
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 
 /**
  * If a self-hosted server's request-upload / request-download response points

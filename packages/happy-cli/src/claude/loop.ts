@@ -47,6 +47,8 @@ interface LoopOptions {
     hookSettingsPath: string
     /** JavaScript runtime to use for spawning Claude Code (default: 'node') */
     jsRuntime?: JsRuntime
+    /** Stable Happy session tag (crash-recovery lineage), recorded against any Claude session ID discovered for this Session. */
+    happyTag?: string
 }
 
 export async function loop(opts: LoopOptions): Promise<number> {
@@ -68,7 +70,8 @@ export async function loop(opts: LoopOptions): Promise<number> {
         onModeChange: opts.onModeChange,
         onAbort: opts.onAbort,
         hookSettingsPath: opts.hookSettingsPath,
-        jsRuntime: opts.jsRuntime
+        jsRuntime: opts.jsRuntime,
+        happyTag: opts.happyTag
     });
 
     opts.onSessionReady?.(session)

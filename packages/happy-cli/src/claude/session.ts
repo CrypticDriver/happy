@@ -4,6 +4,7 @@ import { EnhancedMode } from "./loop";
 import { logger } from "@/ui/logger";
 import type { JsRuntime } from "./runClaude";
 import type { SandboxConfig } from "@/persistence";
+import { recordSid } from "./sessionLineage";
 
 export class Session {
     readonly path: string;
@@ -22,6 +23,8 @@ export class Session {
     readonly hookSettingsPath: string;
     /** JavaScript runtime to use for spawning Claude Code (default: 'node') */
     readonly jsRuntime: JsRuntime;
+    /** Stable Happy session tag, recorded against any Claude session ID this Session discovers (crash-recovery lineage). */
+    readonly happyTag?: string;
 
     sessionId: string | null;
     mode: 'local' | 'remote' = 'local';
@@ -51,6 +54,8 @@ export class Session {
         hookSettingsPath: string,
         /** JavaScript runtime to use for spawning Claude Code (default: 'node') */
         jsRuntime?: JsRuntime,
+        /** Stable Happy session tag, recorded against any Claude session ID this Session discovers (crash-recovery lineage). */
+        happyTag?: string,
     }) {
         this.path = opts.path;
         this.api = opts.api;
@@ -67,6 +72,7 @@ export class Session {
         this._onAbort = opts.onAbort;
         this.hookSettingsPath = opts.hookSettingsPath;
         this.jsRuntime = opts.jsRuntime ?? 'node';
+        this.happyTag = opts.happyTag;
 
         // Start keep alive
         this.client.keepAlive(this.thinking, this.mode);
@@ -119,7 +125,16 @@ export class Session {
             claudeSessionId: sessionId
         }));
         logger.debug(`[Session] Claude Code session ID ${sessionId} added to metadata`);
-        
+
+        // Crash-recovery lineage (goudan-mods): tie this Claude session ID to
+        // our stable Happy tag so a later `claude --resume ${sessionId}` can
+        // look it up and reuse the same server-side session instead of
+        // minting a new one. No-op if we were never given a tag (e.g. legacy
+        // callers that construct Session directly without one).
+        if (this.happyTag) {
+            recordSid(sessionId, this.happyTag);
+        }
+
         // Notify all registered callbacks
         for (const callback of this.sessionFoundCallbacks) {
             callback(sessionId);

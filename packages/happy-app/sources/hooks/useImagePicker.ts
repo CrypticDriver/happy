@@ -11,6 +11,7 @@
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { Platform } from 'react-native';
 import { Modal } from '@/modal';
@@ -19,7 +20,13 @@ import { t } from '@/text';
 import type { AttachmentPreview } from '@/sync/attachmentTypes';
 
 export const MAX_IMAGES_PER_MESSAGE = 20;
-export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+// Widened from 10MB to 200MB per goudan-mods (free file uploads). Client-side
+// only — actual accepted size is still capped server-side by
+// HAPPY_MAX_FILE_SIZE_MB (see packages/happy-server/sources/app/api/routes/attachmentRoutes.ts).
+// If the server env var isn't raised to match, uploads above the server's
+// configured limit will fail with a 413 at upload time instead of being
+// rejected here up front.
+export const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 const IOS_ATTACHMENT_JPEG_QUALITY = 0.92;
 
 export type { AttachmentPreview };
@@ -27,6 +34,7 @@ export type { AttachmentPreview };
 type UseImagePickerResult = {
     selectedImages: AttachmentPreview[];
     pickImages: () => Promise<void>;
+    pickFiles: () => Promise<void>;
     removeImage: (id: string) => void;
     clearImages: () => void;
     addImages: (images: AttachmentPreview[]) => void;
@@ -128,7 +136,7 @@ export function useImagePicker(): UseImagePickerResult {
             if (size > MAX_FILE_SIZE) {
                 Modal.alert(
                     t('imageUpload.fileTooLargeTitle'),
-                    t('imageUpload.fileTooLargeMessage', { name: asset.fileName ?? 'image', maxMb: 10 }),
+                    t('imageUpload.fileTooLargeMessage', { name: asset.fileName ?? 'image', maxMb: Math.floor(MAX_FILE_SIZE / (1024 * 1024)) }),
                     [{ text: t('common.ok') }],
                 );
                 continue;
@@ -174,5 +182,65 @@ export function useImagePicker(): UseImagePickerResult {
         });
     }, []);
 
-    return { selectedImages, pickImages, removeImage, clearImages, addImages };
+    // Arbitrary-file counterpart to pickImages. Reuses the same
+    // AttachmentPreview shape and upload pipeline; image-only fields
+    // (width/height/thumbhash) are left at 0/undefined since the server and
+    // upload plumbing treat them as optional/cosmetic for non-image files.
+    const pickFiles = useCallback(async () => {
+        const remaining = MAX_IMAGES_PER_MESSAGE - selectedCountRef.current;
+        if (remaining <= 0) {
+            Modal.alert(
+                t('imageUpload.limitTitle'),
+                t('imageUpload.limitMessage', { max: MAX_IMAGES_PER_MESSAGE }),
+                [{ text: t('common.ok') }],
+            );
+            return;
+        }
+
+        let result: DocumentPicker.DocumentPickerResult;
+        try {
+            result = await DocumentPicker.getDocumentAsync({
+                type: '*/*',
+                multiple: true,
+                copyToCacheDirectory: true,
+            });
+        } catch (err) {
+            console.warn(`[useImagePicker] pickFiles failed: ${err instanceof Error ? err.message : String(err)}`);
+            return;
+        }
+
+        if (result.canceled || !result.assets?.length) return;
+
+        const assets = result.assets.slice(0, remaining);
+        const previews: AttachmentPreview[] = [];
+
+        for (const asset of assets) {
+            const size = asset.size ?? 0;
+            if (size > MAX_FILE_SIZE) {
+                Modal.alert(
+                    t('imageUpload.fileTooLargeTitle'),
+                    t('imageUpload.fileTooLargeMessage', { name: asset.name ?? 'file', maxMb: Math.floor(MAX_FILE_SIZE / (1024 * 1024)) }),
+                    [{ text: t('common.ok') }],
+                );
+                continue;
+            }
+
+            previews.push({
+                id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                uri: asset.uri,
+                width: 0,
+                height: 0,
+                mimeType: asset.mimeType ?? 'application/octet-stream',
+                size,
+                name: asset.name ?? `file_${Date.now()}`,
+                // No thumbhash for non-image files — AttachmentPreview.thumbhash is optional.
+            });
+        }
+
+        if (previews.length > 0) {
+            setSelectedImages(prev => [...prev, ...previews].slice(0, MAX_IMAGES_PER_MESSAGE));
+        }
+    }, []);
+
+    return { selectedImages, pickImages, pickFiles, removeImage, clearImages, addImages };
 }
