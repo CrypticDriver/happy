@@ -133,7 +133,7 @@ const SectionHeader = React.memo(({ session, displayPath }: { session: SessionRo
             <Pressable
                 onPress={handleAdd}
                 hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                style={[styles.addButton, { opacity: Platform.OS !== 'web' || isHovered ? 1 : 0 }]}
+                style={[styles.addButton, { opacity: 1 }]}
             >
                 <Ionicons name="add-outline" size={14} color={theme.colors.textSecondary} />
             </Pressable>
