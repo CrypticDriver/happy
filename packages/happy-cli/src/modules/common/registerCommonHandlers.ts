@@ -8,6 +8,7 @@ import { run as runRipgrep } from '@/modules/ripgrep/index';
 import { run as runDifftastic } from '@/modules/difftastic/index';
 import { RpcHandlerManager } from '../../api/rpc/RpcHandlerManager';
 import { validatePath } from './pathSecurity';
+import { requestExecApproval } from './execApproval';
 
 const execAsync = promisify(exec);
 
@@ -155,6 +156,14 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
     // Shell command handler - executes commands in the default shell
     rpcHandlerManager.registerHandler<BashRequest, BashResponse>('bash', async (data) => {
         logger.debug('Shell command request:', data.command);
+
+        // Optional approval gate (Happy desktop app confirmation dialog).
+        // No-op unless HAPPY_EXEC_APPROVER_SOCKET is set; denies on failure.
+        const approval = await requestExecApproval({ command: data.command, cwd: data.cwd, timeout: data.timeout });
+        if (!approval.approved) {
+            logger.debug('Shell command denied by approver:', approval.reason);
+            return { success: false, error: approval.reason || 'Command rejected by user' };
+        }
 
         // Validate cwd if provided
         // Special case: "/" means "use shell's default cwd" (used by CLI detection)
