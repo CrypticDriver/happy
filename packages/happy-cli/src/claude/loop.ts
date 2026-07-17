@@ -49,6 +49,8 @@ interface LoopOptions {
     jsRuntime?: JsRuntime
     /** Stable Happy session tag (crash-recovery lineage), recorded against any Claude session ID discovered for this Session. */
     happyTag?: string
+    /** Per-session content key (dataKey variant only) persisted with the lineage so stable-tag resume can decrypt the existing row. */
+    happyDataKey?: Uint8Array | null
 }
 
 export async function loop(opts: LoopOptions): Promise<number> {
@@ -71,7 +73,8 @@ export async function loop(opts: LoopOptions): Promise<number> {
         onAbort: opts.onAbort,
         hookSettingsPath: opts.hookSettingsPath,
         jsRuntime: opts.jsRuntime,
-        happyTag: opts.happyTag
+        happyTag: opts.happyTag,
+        happyDataKey: opts.happyDataKey
     });
 
     opts.onSessionReady?.(session)

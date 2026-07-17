@@ -30,7 +30,14 @@ export class ApiClient {
   async getOrCreateSession(opts: {
     tag: string,
     metadata: Metadata,
-    state: AgentState | null
+    state: AgentState | null,
+    /**
+     * Reuse a previously recorded per-session content key instead of
+     * generating a fresh one (dataKey variant only). Required when `tag`
+     * may already exist on the server: get-or-create returns the existing
+     * row, whose metadata can only be decrypted with the original key.
+     */
+    reuseDataKey?: Uint8Array | null
   }): Promise<Session | null> {
 
     // Resolve encryption key
@@ -39,8 +46,8 @@ export class ApiClient {
     let encryptionVariant: 'legacy' | 'dataKey';
     if (this.credential.encryption.type === 'dataKey') {
 
-      // Generate new encryption key
-      encryptionKey = getRandomBytes(32);
+      // Generate new encryption key (or reuse the recorded one for stable-tag resume)
+      encryptionKey = opts.reuseDataKey ?? getRandomBytes(32);
       encryptionVariant = 'dataKey';
 
       // Derive and encrypt data encryption key

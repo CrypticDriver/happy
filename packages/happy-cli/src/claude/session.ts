@@ -25,6 +25,7 @@ export class Session {
     readonly jsRuntime: JsRuntime;
     /** Stable Happy session tag, recorded against any Claude session ID this Session discovers (crash-recovery lineage). */
     readonly happyTag?: string;
+    readonly happyDataKey?: Uint8Array | null;
 
     sessionId: string | null;
     mode: 'local' | 'remote' = 'local';
@@ -56,6 +57,8 @@ export class Session {
         jsRuntime?: JsRuntime,
         /** Stable Happy session tag, recorded against any Claude session ID this Session discovers (crash-recovery lineage). */
         happyTag?: string,
+        /** Per-session content key (dataKey variant only), persisted alongside the lineage tag. */
+        happyDataKey?: Uint8Array | null,
     }) {
         this.path = opts.path;
         this.api = opts.api;
@@ -73,6 +76,7 @@ export class Session {
         this.hookSettingsPath = opts.hookSettingsPath;
         this.jsRuntime = opts.jsRuntime ?? 'node';
         this.happyTag = opts.happyTag;
+        this.happyDataKey = opts.happyDataKey;
 
         // Start keep alive
         this.client.keepAlive(this.thinking, this.mode);
@@ -132,7 +136,7 @@ export class Session {
         // minting a new one. No-op if we were never given a tag (e.g. legacy
         // callers that construct Session directly without one).
         if (this.happyTag) {
-            recordSid(sessionId, this.happyTag);
+            recordSid(sessionId, this.happyTag, this.happyDataKey ?? null);
         }
 
         // Notify all registered callbacks

@@ -39,7 +39,7 @@ import { getProjectPath } from './utils/path';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { RawJSONLinesSchema, type RawJSONLines } from './types';
-import { lookupTag, recordSid } from './sessionLineage';
+import { lookupLineage, recordSid } from './sessionLineage';
 
 /**
  * Extract a `--resume <sessionId>` argument from Claude CLI args, mirroring
@@ -99,10 +99,10 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     // server hands back the *same* session row (same title/history) instead
     // of minting a new one, so a crash + resume doesn't fork the chat.
     const resumeClaudeSessionId = extractResumeSessionId(options.claudeArgs);
-    const lineageTag = resumeClaudeSessionId ? lookupTag(resumeClaudeSessionId) : null;
-    const sessionTag = lineageTag ?? randomUUID();
-    if (lineageTag) {
-        logger.debug(`[START] Resuming Claude session ${resumeClaudeSessionId} with known Happy tag ${lineageTag}`);
+    const lineage = resumeClaudeSessionId ? lookupLineage(resumeClaudeSessionId) : null;
+    let sessionTag = lineage?.tag ?? randomUUID();
+    if (lineage) {
+        logger.debug(`[START] Resuming Claude session ${resumeClaudeSessionId} with known Happy tag ${lineage.tag} (dataKey recorded: ${!!lineage.dataKey})`);
     }
 
     // Log environment info at startup
@@ -198,7 +198,19 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             agentStateVersion: parseInt(reconnectAgentStateVersion || '0', 10),
         };
     } else {
-        response = await api.getOrCreateSession({ tag: sessionTag, metadata, state });
+        response = await api.getOrCreateSession({ tag: sessionTag, metadata, state, reuseDataKey: lineage?.dataKey ?? undefined });
+
+        // Stable-tag resume fallback: if the server returned an existing row
+        // whose metadata we could not decrypt (dataKey variant without the
+        // original per-session key — e.g. lineage recorded by an older CLI
+        // that didn't persist dataKey), do NOT proceed with a null-metadata
+        // session (it would crash ApiSessionClient). Fall back to a fresh
+        // tag/session row and re-record the lineage below.
+        if (response && response.metadata === null) {
+            logger.debug(`[START] Stable-tag session ${response.id} metadata undecryptable (missing/mismatched data key); falling back to a fresh session tag`);
+            sessionTag = randomUUID();
+            response = await api.getOrCreateSession({ tag: sessionTag, metadata, state });
+        }
     }
 
     // Handle server unreachable case - run Claude locally with hot reconnection
@@ -286,7 +298,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     // the SessionStart hook fires (which also calls recordSid via
     // session.onSessionFound) still leaves a usable mapping.
     if (resumeClaudeSessionId) {
-        recordSid(resumeClaudeSessionId, sessionTag);
+        recordSid(resumeClaudeSessionId, sessionTag, response.encryptionVariant === 'dataKey' ? response.encryptionKey : null);
     }
 
     // Always report to daemon if it exists
@@ -989,7 +1001,8 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         sandboxConfig,
         hookSettingsPath,
         jsRuntime: options.jsRuntime,
-        happyTag: sessionTag
+        happyTag: sessionTag,
+        happyDataKey: response.encryptionVariant === 'dataKey' ? response.encryptionKey : null
     });
 
     // Cleanup session resources (intervals, callbacks) - prevents memory leak
