@@ -409,6 +409,54 @@ Conversation history is preserved on the server, but in-flight tool calls are in
       process.exit(1)
     }
     return;
+  } else if (subcommand === 'kiro') {
+    // Kiro (AWS agentic coding CLI) via the generic ACP runner.
+    // Kept as a first-class subcommand so the daemon can spawn it with the
+    // same uniform arg shape it uses for claude/codex/gemini/openclaw.
+    try {
+      const { runAcp, resolveAcpAgentConfig } = await import('@/agent/acp');
+
+      let startedBy: 'daemon' | 'terminal' | undefined = undefined;
+      let verbose = false;
+      const passthroughArgs: string[] = [];
+      for (let i = 1; i < args.length; i++) {
+        if (args[i] === '--started-by') {
+          startedBy = args[++i] as 'daemon' | 'terminal';
+          continue;
+        }
+        if (args[i] === '--happy-starting-mode') {
+          // Accepted for daemon-spawn compatibility; the ACP runner is
+          // always remote-controlled, so the value is ignored.
+          i++;
+          continue;
+        }
+        if (args[i] === '--verbose') {
+          verbose = true;
+          continue;
+        }
+        passthroughArgs.push(args[i]);
+      }
+
+      const resolved = resolveAcpAgentConfig(['kiro', ...passthroughArgs]);
+      const { credentials } = await authAndSetupMachineIfNeeded();
+      await ensureDaemonRunning()
+
+      await runAcp({
+        credentials,
+        startedBy,
+        verbose,
+        agentName: resolved.agentName,
+        command: resolved.command,
+        args: resolved.args,
+      });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error')
+      if (process.env.DEBUG) {
+        console.error(error)
+      }
+      process.exit(1)
+    }
+    return;
   } else if (subcommand === 'openclaw') {
     try {
       const { runOpenClaw } = await import('@/openclaw/runOpenClaw');
@@ -691,6 +739,7 @@ ${chalk.bold('Usage:')}
   happy resume            Resume a previous Happy session by Happy session ID
   happy codex             Start Codex mode
   happy gemini            Start Gemini mode (ACP)
+  happy kiro              Start Kiro mode (ACP via kiro-cli)
   happy acp               Start a generic ACP-compatible agent
   happy connect           Connect AI vendor API keys
   happy sandbox           Configure and manage OS-level sandboxing

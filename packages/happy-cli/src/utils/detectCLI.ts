@@ -8,6 +8,7 @@ export interface CLIAvailability {
   codex: boolean;
   gemini: boolean;
   openclaw: boolean;
+  kiro: boolean;
   detectedAt: number;
 }
 
@@ -44,7 +45,10 @@ function detectPosix(): CLIAvailability {
   const openclawEnv = !!process.env.OPENCLAW_GATEWAY_URL;
   const openclaw = openclawCommand || openclawConfig || openclawEnv;
 
-  return { claude, codex, gemini, openclaw, detectedAt: Date.now() };
+  // Kiro: AWS agentic coding CLI, exposes an ACP server via `kiro-cli acp`
+  const kiro = commandExists('kiro-cli');
+
+  return { claude, codex, gemini, openclaw, kiro, detectedAt: Date.now() };
 }
 
 function detectWindows(): CLIAvailability {
@@ -67,5 +71,7 @@ function detectWindows(): CLIAvailability {
   const openclawEnv = !!process.env.OPENCLAW_GATEWAY_URL;
   const openclaw = openclawCommand || openclawConfig || openclawEnv;
 
-  return { claude, codex, gemini, openclaw, detectedAt: Date.now() };
+  const kiro = checkCommand('kiro-cli');
+
+  return { claude, codex, gemini, openclaw, kiro, detectedAt: Date.now() };
 }
