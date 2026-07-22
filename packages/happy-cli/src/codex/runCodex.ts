@@ -38,7 +38,8 @@ import { resumeExistingThread } from './resumeExistingThread';
 import { emitReadyIfIdle } from './emitReadyIfIdle';
 import { enqueueCodexUserText, isCodexClearText } from './codexClearCommand';
 import { downloadCodexFileEventAttachment } from './utils/attachmentEvents';
-import { prepareCodexImageInputItems } from './utils/imageInput';
+import { prepareCodexImageInputItems, detectSupportedImageType } from './utils/imageInput';
+import { saveNonImageAttachment } from '@/claude/utils/nonImageAttachments';
 import { createSerialAsyncHandler } from './utils/serialAsyncHandler';
 import { buildCodexThreadBackfillEnvelopes } from './utils/threadImageBackfill';
 import {
@@ -945,14 +946,37 @@ export async function runCodex(opts: {
                 const imageInputs = await prepareCodexImageInputItems(message.attachments, {
                     sessionId: session.sessionId,
                 });
+                // Persist non-image attachments (docx/pdf/xlsx/...) to <cwd>/.happy-uploads
+                // so Codex can read them with filesystem tools — mirrors the Claude flavor
+                // (claudeRemoteLauncher.ts). The image input path above only accepts the
+                // four magic-byte image types; everything else used to be dropped silently.
+                const uploadNotes: string[] = [];
+                for (const att of message.attachments ?? []) {
+                    if (detectSupportedImageType(att.data)) {
+                        continue;
+                    }
+                    try {
+                        const saved = saveNonImageAttachment(att);
+                        uploadNotes.push(`📎 Uploaded file: ${saved.relativePath} (${saved.size} bytes)`);
+                        logger.debug('[Codex] Saved non-image attachment to uploads dir', {
+                            relativePath: saved.relativePath,
+                            size: saved.size,
+                        });
+                    } catch (error) {
+                        logger.debug('[Codex] Failed to save non-image attachment', {
+                            errorName: error instanceof Error ? error.name : typeof error,
+                        });
+                    }
+                }
                 if ((message.attachments?.length ?? 0) > 0) {
                     logger.debug('[Codex] Prepared image inputs for turn', {
                         inputCount: imageInputs.inputItems.length,
                         skippedCount: imageInputs.skipped,
+                        savedNonImageCount: uploadNotes.length,
                     });
                 }
                 const hasUserText = message.message.trim().length > 0;
-                if ((message.attachments?.length ?? 0) > 0 && imageInputs.inputItems.length === 0 && !hasUserText) {
+                if ((message.attachments?.length ?? 0) > 0 && imageInputs.inputItems.length === 0 && uploadNotes.length === 0 && !hasUserText) {
                     session.sendSessionEvent({
                         type: 'message',
                         message: 'No supported images were available to send to Codex.',
@@ -960,7 +984,9 @@ export async function runCodex(opts: {
                     continue;
                 }
                 const turnPrompt = buildCodexTurnPrompt({
-                    message: message.message,
+                    message: uploadNotes.length > 0
+                        ? `${uploadNotes.join('\n')}\n${message.message}`
+                        : message.message,
                     mode: message.mode,
                     includeAppendSystemPrompt,
                     includeTitleInstruction: first,
