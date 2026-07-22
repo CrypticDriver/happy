@@ -34,16 +34,14 @@ describe('modelModeOptions', () => {
         const models = getCodexModelModes();
         expect(models.map((model) => model.key)).toEqual([
             'default',
-            'gpt-5.5',
-            'gpt-5.4',
-            'gpt-5.3-codex',
-            'gpt-5.2-codex',
-            'gpt-5.1-codex-max',
-            'gpt-5.2',
-            'gpt-5.1-codex-mini',
+            'openai.gpt-5.6-sol',
+            'openai.gpt-5.6-terra',
+            'openai.gpt-5.6-luna',
+            'openai.gpt-5.5',
+            'openai.gpt-5.4',
         ]);
         expect(models[0].name).toBe('default model');
-        expect(models[1].name).toBe('gpt-5.5');
+        expect(models[1].name).toBe('gpt-5.6-sol');
     });
 
     it('uses code defaults for agent defaults', () => {
@@ -51,7 +49,7 @@ describe('modelModeOptions', () => {
         expect(getDefaultModelKey('claude')).toBe('opus');
         expect(getDefaultEffortKey('claude')).toBe('medium');
         expect(getDefaultPermissionModeKey('codex')).toBe('yolo');
-        expect(getDefaultModelKey('codex')).toBe('gpt-5.5');
+        expect(getDefaultModelKey('codex')).toBe('openai.gpt-5.6-sol');
         expect(getDefaultEffortKey('codex')).toBe('medium');
     });
 

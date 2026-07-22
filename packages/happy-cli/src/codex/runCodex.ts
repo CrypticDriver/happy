@@ -70,7 +70,10 @@ function describeCodexFailure(msg: any): string | null {
     return 'Unknown error';
 }
 
-const DEFAULT_CODEX_MODEL = 'gpt-5.5';
+// undefined = defer to the machine's codex config.toml default model.
+// (Was 'gpt-5.5' — a hardcoded OpenAI short name that 404s when codex runs
+// with model_provider="amazon-bedrock", whose IDs look like openai.gpt-5.6-sol.)
+const DEFAULT_CODEX_MODEL: string | undefined = undefined;
 const DEFAULT_CODEX_EFFORT: ReasoningEffort = 'medium';
 const DEFAULT_CODEX_PERMISSION_MODE: PermissionMode = 'yolo';
 

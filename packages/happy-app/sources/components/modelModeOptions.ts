@@ -85,15 +85,17 @@ export function getClaudeModelModes(): ModelMode[] {
 }
 
 export function getCodexModelModes(): ModelMode[] {
+    // Bedrock Mantle model IDs — our codex runs with model_provider="amazon-bedrock",
+    // so keys must be the full Bedrock IDs (short OpenAI names like "gpt-5.5" 404
+    // against bedrock-mantle). "default" defers to the machine's codex config.toml
+    // (currently openai.gpt-5.6-sol on CC).
     return [
-        { key: 'default', name: 'default model', description: null },
-        { key: 'gpt-5.5', name: 'gpt-5.5', description: null },
-        { key: 'gpt-5.4', name: 'gpt-5.4', description: null },
-        { key: 'gpt-5.3-codex', name: 'gpt-5.3-codex', description: null },
-        { key: 'gpt-5.2-codex', name: 'gpt-5.2-codex', description: null },
-        { key: 'gpt-5.1-codex-max', name: 'gpt-5.1-codex-max', description: null },
-        { key: 'gpt-5.2', name: 'gpt-5.2', description: null },
-        { key: 'gpt-5.1-codex-mini', name: 'gpt-5.1-codex-mini', description: null },
+        { key: 'default', name: 'default model', description: 'config.toml default (gpt-5.6-sol)' },
+        { key: 'openai.gpt-5.6-sol', name: 'gpt-5.6-sol', description: 'flagship' },
+        { key: 'openai.gpt-5.6-terra', name: 'gpt-5.6-terra', description: 'balanced' },
+        { key: 'openai.gpt-5.6-luna', name: 'gpt-5.6-luna', description: 'fast' },
+        { key: 'openai.gpt-5.5', name: 'gpt-5.5', description: null },
+        { key: 'openai.gpt-5.4', name: 'gpt-5.4', description: null },
     ];
 }
 
