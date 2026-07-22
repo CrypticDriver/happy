@@ -26,6 +26,23 @@ export function authRoutes(app: Fastify) {
 
         // Create or update user in database
         const publicKeyHex = privacyKit.encodeHex(publicKey);
+
+        // Self-host hardening: HAPPY_REGISTRATION_MODE=closed rejects unknown
+        // public keys instead of auto-creating an account. Anyone who obtains
+        // the server URL can otherwise mint accounts and use the relay/storage
+        // for free (upstream /v1/auth is an unconditional upsert). Device-link
+        // flows (terminalAuthRequest / accountAuthRequest) are unaffected —
+        // they attach to existing accounts and require approval from a
+        // logged-in client.
+        const registrationClosed = (process.env.HAPPY_REGISTRATION_MODE ?? 'open').toLowerCase() === 'closed';
+        if (registrationClosed) {
+            const existing = await db.account.findUnique({ where: { publicKey: publicKeyHex } });
+            if (!existing) {
+                log({ module: 'auth' }, `Registration closed - rejected unknown publicKey: ${publicKeyHex}`);
+                return reply.code(403).send({ error: 'Registration is closed on this server' });
+            }
+        }
+
         const user = await db.account.upsert({
             where: { publicKey: publicKeyHex },
             update: { updatedAt: new Date() },
