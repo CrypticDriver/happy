@@ -75,9 +75,11 @@ export function getGeminiPermissionModes(translate: Translate): PermissionMode[]
 }
 
 export function getClaudeModelModes(): ModelMode[] {
+    // Alias → real model mapping lives in CC machine ~/.bashrc
+    // (ANTHROPIC_DEFAULT_*_MODEL). Since 2026-08-10: opus → claude-opus-5.
     return [
         { key: 'default', name: 'default model', description: null },
-        { key: 'opus', name: 'opus 4.8', description: null },
+        { key: 'opus', name: 'opus 5', description: null },
         { key: 'fable', name: 'fable 5', description: null },
         { key: 'sonnet', name: 'sonnet 4.6', description: null },
         { key: 'haiku', name: 'haiku 4.5', description: null },
