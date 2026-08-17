@@ -23,6 +23,27 @@ import { InvalidateSync } from '@/utils/sync';
 import axios from 'axios';
 
 /**
+ * Attachment size ceiling for CLI-side upload/download, in bytes.
+ *
+ * Must stay >= the server's limit, which is configured by the same
+ * HAPPY_MAX_FILE_SIZE_MB env var (see
+ * packages/happy-server/sources/app/api/routes/attachmentRoutes.ts). Axios
+ * enforces maxBodyLength/maxContentLength client-side, so a value lower than
+ * the server's would make the CLI reject blobs the server happily accepts —
+ * in particular it would fail to DOWNLOAD attachments the app uploaded.
+ * Default 200MB matches the app (sources/hooks/useImagePicker.ts) and our
+ * deployed server env.
+ */
+const MAX_ATTACHMENT_SIZE = (parseInt(process.env.HAPPY_MAX_FILE_SIZE_MB || '200', 10)) * 1024 * 1024;
+
+/**
+ * Transfer timeout for attachment blobs. The old flat 60s could not move a
+ * 200MB body on anything short of a ~27Mbps sustained link, so scale it with
+ * the configured ceiling (roughly 1 minute per 20MB, floor 60s).
+ */
+const ATTACHMENT_TRANSFER_TIMEOUT_MS = Math.max(60_000, Math.ceil(MAX_ATTACHMENT_SIZE / (20 * 1024 * 1024)) * 60_000);
+
+/**
  * ACP (Agent Communication Protocol) message data types.
  * This is the unified format for all agent messages - CLI adapts each provider's format to ACP.
  */
@@ -431,8 +452,8 @@ export class ApiSessionClient extends EventEmitter {
                 headers: {
                     'Content-Type': `multipart/form-data; boundary=${boundary}`,
                 },
-                timeout: 60000,
-                maxBodyLength: 10 * 1024 * 1024,
+                timeout: ATTACHMENT_TRANSFER_TIMEOUT_MS,
+                maxBodyLength: MAX_ATTACHMENT_SIZE,
             });
             return;
         }
@@ -446,8 +467,8 @@ export class ApiSessionClient extends EventEmitter {
 
         await axios.put(upload.uploadUrl, Buffer.from(encrypted), {
             headers,
-            timeout: 60000,
-            maxBodyLength: 10 * 1024 * 1024,
+            timeout: ATTACHMENT_TRANSFER_TIMEOUT_MS,
+            maxBodyLength: MAX_ATTACHMENT_SIZE,
         });
     }
 
@@ -498,9 +519,9 @@ export class ApiSessionClient extends EventEmitter {
         const response = await axios.get(downloadUrl, {
             headers,
             responseType: 'arraybuffer',
-            timeout: 60000,
+            timeout: ATTACHMENT_TRANSFER_TIMEOUT_MS,
             maxRedirects: 5,
-            maxContentLength: 10 * 1024 * 1024,
+            maxContentLength: MAX_ATTACHMENT_SIZE,
         });
         return new Uint8Array(response.data);
     }
