@@ -497,6 +497,9 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // Image attachment state (expImageUpload feature flag)
     const expImageUpload = useSetting('expImageUpload');
     const { selectedImages, pickImages, pickFiles, removeImage, clearImages, addImages } = useImagePicker();
+    // True while sendMessage() is uploading the selected attachments. Drives
+    // the preview strip's uploading state so a large upload isn't silent.
+    const [isUploadingAttachments, setIsUploadingAttachments] = React.useState(false);
 
     // ChatComposer owns the message state + useDraft subscription. We only
     // hold an imperative handle so handleSend can read the live text and
@@ -545,9 +548,27 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         const liveMessage = composerHandleRef.current?.getMessage() ?? '';
         if (liveMessage.trim() || (expImageUpload && selectedImages.length > 0)) {
             const attachments = expImageUpload ? selectedImages : undefined;
+            const hasAttachments = (attachments?.length ?? 0) > 0;
             composerHandleRef.current?.clearMessage();
-            if (expImageUpload) clearImages();
-            sync.sendMessage(sessionId, liveMessage, { source: 'chat', attachments });
+
+            // Attachments must stay on screen until the upload actually
+            // finishes. clearImages() used to run here, synchronously, before
+            // sendMessage() had even started reading bytes — so the preview
+            // strip vanished instantly and a large upload ran with zero UI
+            // feedback. Keep the strip mounted (marked uploading) and clear it
+            // only once the send settles.
+            if (!hasAttachments) {
+                if (expImageUpload) clearImages();
+                void sync.sendMessage(sessionId, liveMessage, { source: 'chat', attachments });
+                return;
+            }
+
+            setIsUploadingAttachments(true);
+            void sync.sendMessage(sessionId, liveMessage, { source: 'chat', attachments })
+                .finally(() => {
+                    setIsUploadingAttachments(false);
+                    clearImages();
+                });
         }
     }, [sessionId, expImageUpload, selectedImages, clearImages]);
 
@@ -721,6 +742,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             showAbortButton={sessionStatus.state === 'thinking' || sessionStatus.state === 'waiting'}
             onFileViewerPress={experiments && !isTablet ? handleFileViewerPress : undefined}
             selectedImages={expImageUpload ? selectedImages : undefined}
+            isUploadingAttachments={isUploadingAttachments}
             onPickImages={expImageUpload ? pickImages : undefined}
             onPickFiles={expImageUpload ? pickFiles : undefined}
             onRemoveImage={expImageUpload ? removeImage : undefined}

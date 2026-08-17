@@ -8,7 +8,7 @@
  * a document icon plus name/size instead.
  */
 import * as React from 'react';
-import { ScrollView, View, Pressable, Text } from 'react-native';
+import { ScrollView, View, Pressable, Text, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -30,9 +30,15 @@ function formatSize(bytes: number): string | undefined {
 interface AgentInputAttachmentStripProps {
     images: AttachmentPreview[];
     onRemove: (id: string) => void;
+    /**
+     * True while the attachments are being uploaded. The strip stays mounted
+     * for the duration of the upload, so it dims the tiles, swaps the remove
+     * button for a spinner, and blocks removal to signal work in progress.
+     */
+    isUploading?: boolean;
 }
 
-export function AgentInputAttachmentStrip({ images, onRemove }: AgentInputAttachmentStripProps) {
+export function AgentInputAttachmentStrip({ images, onRemove, isUploading = false }: AgentInputAttachmentStripProps) {
     const { theme } = useUnistyles();
 
     if (images.length === 0) return null;
@@ -51,6 +57,7 @@ export function AgentInputAttachmentStrip({ images, onRemove }: AgentInputAttach
                     image={img}
                     onRemove={onRemove}
                     theme={theme}
+                    isUploading={isUploading}
                 />
             ))}
         </ScrollView>
@@ -61,10 +68,12 @@ function AttachmentThumbnail({
     image,
     onRemove,
     theme,
+    isUploading,
 }: {
     image: AttachmentPreview;
     onRemove: (id: string) => void;
     theme: any;
+    isUploading: boolean;
 }) {
     // Build placeholder from thumbhash if available
     const placeholder = React.useMemo(() => {
@@ -79,7 +88,8 @@ function AttachmentThumbnail({
     return (
         <View style={[
             styles.thumbContainer,
-            { borderColor: theme.colors.divider }
+            { borderColor: theme.colors.divider },
+            isUploading && styles.thumbContainerUploading,
         ]}>
             {isImage ? (
                 <Image
@@ -114,17 +124,26 @@ function AttachmentThumbnail({
                     )}
                 </View>
             )}
-            {/* Remove button */}
-            <Pressable
-                onPress={() => onRemove(image.id)}
-                hitSlop={4}
-                style={(p) => [
+            {/* Remove button, or an upload spinner while the send is in flight. */}
+            {isUploading ? (
+                <View style={[
                     styles.removeButton,
-                    { backgroundColor: theme.colors.surfaceHigh, opacity: p.pressed ? 0.7 : 1 }
-                ]}
-            >
-                <Ionicons name="close" size={10} color={theme.colors.text} />
-            </Pressable>
+                    { backgroundColor: theme.colors.surfaceHigh },
+                ]}>
+                    <ActivityIndicator size="small" color={theme.colors.text} />
+                </View>
+            ) : (
+                <Pressable
+                    onPress={() => onRemove(image.id)}
+                    hitSlop={4}
+                    style={(p) => [
+                        styles.removeButton,
+                        { backgroundColor: theme.colors.surfaceHigh, opacity: p.pressed ? 0.7 : 1 }
+                    ]}
+                >
+                    <Ionicons name="close" size={10} color={theme.colors.text} />
+                </Pressable>
+            )}
         </View>
     );
 }
@@ -146,6 +165,9 @@ const styles = StyleSheet.create(() => ({
         overflow: 'visible',
         borderWidth: 1,
         position: 'relative',
+    },
+    thumbContainerUploading: {
+        opacity: 0.5,
     },
     thumb: {
         borderRadius: BORDER_RADIUS,

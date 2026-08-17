@@ -94,6 +94,13 @@ interface AgentInputProps {
     onAddImages?: (images: AttachmentPreview[]) => void;
     /** Arbitrary (non-image) file attachments, reuses the same upload pipeline. */
     onPickFiles?: () => void;
+    /**
+     * True while the selected attachments are being uploaded by sendMessage().
+     * The preview strip stays mounted during the upload (it used to be cleared
+     * synchronously on send, making large uploads completely silent), so it
+     * needs this to show progress instead of looking like a stuck composer.
+     */
+    isUploadingAttachments?: boolean;
 }
 
 const MAX_CONTEXT_SIZE = 190000;
@@ -1211,6 +1218,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                         <AgentInputAttachmentStrip
                             images={props.selectedImages}
                             onRemove={props.onRemoveImage ?? (() => {})}
+                            isUploading={props.isUploadingAttachments ?? false}
                         />
                     )}
                     {/* Input field */}
