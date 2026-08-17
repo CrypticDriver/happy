@@ -17,6 +17,22 @@ export type AttachmentPreview = {
     thumbhash?: string;
 };
 
+/**
+ * True when an attachment is a real image that can be rendered with <Image>.
+ *
+ * The picker pipeline is shared between pickImages() and pickFiles() (see
+ * hooks/useImagePicker.ts), so `selectedImages` is a mixed bag of images and
+ * arbitrary files. Anything deciding "can I draw this as a thumbnail?" or
+ * "which picker button should light up?" must branch on this rather than on
+ * the array being non-empty.
+ *
+ * pickFiles() sets width/height to 0 and omits thumbhash for non-images, but
+ * mimeType is the authoritative signal.
+ */
+export function isImageAttachment(attachment: Pick<AttachmentPreview, 'mimeType'>): boolean {
+    return attachment.mimeType.startsWith('image/');
+}
+
 /** Result of a successful attachment upload — ready to build a file event. */
 export type UploadedAttachment = {
     ref: string;

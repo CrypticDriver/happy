@@ -4,6 +4,7 @@ import { View, Platform, useWindowDimensions, ViewStyle, Text, ActivityIndicator
 import { Image } from 'expo-image';
 import { AgentInputAttachmentStrip } from './AgentInputAttachmentStrip';
 import type { AttachmentPreview } from '@/sync/attachmentTypes';
+import { isImageAttachment } from '@/sync/attachmentTypes';
 import { generateThumbhash } from '@/utils/thumbhash';
 import { layout } from './layout';
 import { MultiTextInput, KeyPressEvent } from './MultiTextInput';
@@ -555,10 +556,17 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     // updated via startTransition from the keystroke handler so a busy reducer
     // never blocks the next character from landing in the textarea.
     const [hasText, setHasText] = React.useState(() => props.initialValue.trim().length > 0);
-    const hasImages = (props.selectedImages?.length ?? 0) > 0;
+    // Any attachment (image or arbitrary file) enables the send button.
+    const hasAttachments = (props.selectedImages?.length ?? 0) > 0;
+    // Picker buttons highlight independently: selectedImages is a mixed list
+    // fed by both pickImages() and pickFiles(), so keying either icon off the
+    // array length alone lights up the wrong one (attaching a PDF used to
+    // highlight the image icon).
+    const hasImageAttachments = (props.selectedImages ?? []).some(isImageAttachment);
+    const hasFileAttachments = (props.selectedImages ?? []).some((a) => !isImageAttachment(a));
     const canPressSendButton = !props.isSending
         && !props.isSendDisabled
-        && (isSendBlocked ? (hasText || hasImages) : (hasText || hasImages || !!props.onMicPress));
+        && (isSendBlocked ? (hasText || hasAttachments) : (hasText || hasAttachments || !!props.onMicPress));
 
     // Check if this is a Codex, Gemini, or OpenClaw session
     // Use metadata.flavor for existing sessions, agentType prop for new sessions
@@ -816,12 +824,12 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         hapticsLight();
         // Live read avoids stalling behind the transitioned `hasText`.
         const liveHasText = (inputRef.current?.getText() ?? '').trim().length > 0;
-        if (liveHasText || hasImages) {
+        if (liveHasText || hasAttachments) {
             props.onSend();
         } else {
             props.onMicPress?.();
         }
-    }, [handleBlockedSendAttempt, hasImages, isSendBlocked, props.isSendDisabled, props.isSending, props.onSend, props.onMicPress]);
+    }, [handleBlockedSendAttempt, hasAttachments, isSendBlocked, props.isSendDisabled, props.isSending, props.onSend, props.onMicPress]);
 
     // Handle keyboard navigation
     const handleKeyPress = React.useCallback((event: KeyPressEvent): boolean => {
@@ -1344,7 +1352,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         <Ionicons
                                             name="image-outline"
                                             size={16}
-                                            color={(props.selectedImages?.length ?? 0) > 0
+                                            color={hasImageAttachments
                                                 ? theme.colors.radio.active
                                                 : theme.colors.button.secondary.tint}
                                         />
@@ -1369,7 +1377,9 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         <Ionicons
                                             name="attach-outline"
                                             size={16}
-                                            color={theme.colors.button.secondary.tint}
+                                            color={hasFileAttachments
+                                                ? theme.colors.radio.active
+                                                : theme.colors.button.secondary.tint}
                                         />
                                     </Pressable>
                                 )}
